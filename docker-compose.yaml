@@ -1,0 +1,19 @@
+version: '2'
+services:
+  proxy:
+    build:
+      context: ./envoy
+      dockerfile: Dockerfile.proxy
+    volumes:
+      - ./envoy/envoy.yaml:/etc/envoy.yaml
+      - ./target/wasm32-unknown-unknown/release/proxy_wasm_rust.wasm:/etc/proxy_wasm_rust.wasm
+    networks:
+      - envoymesh
+    expose:
+      - "80"
+      - "8001"
+    ports:
+      - "18000:80"
+      - "18001:8001"
+networks:
+  envoymesh: {}

@@ -1,28 +1,55 @@
 use log::info;
 use proxy_wasm::traits::*;
 use proxy_wasm::types::*;
-use std::time::Duration;
 
 #[no_mangle]
 pub fn _start() {
     proxy_wasm::set_log_level(LogLevel::Trace);
-    proxy_wasm::set_root_context(|_| -> Box<dyn RootContext> {
-        Box::new(Scraper)
+    proxy_wasm::set_http_context(|_, _| -> Box<dyn HttpContext> {
+        Box::new(ActivityLogger{ logger_type: "ActivityLogger".to_string(), ..Default::default() })
     });
 }
 
-struct Scraper;
+#[derive(Default)]
+struct ActivityLogger {
+    finc_user_id: String,
+    path: String,
+    method: String,
+    status: String,
+    logger_type: String,
+}
 
-impl Context for Scraper {}
+impl Context for ActivityLogger {}
 
-impl RootContext for Scraper {
-    fn on_vm_start(&mut self, _: usize) -> bool {
-        info!("Hello!");
-        self.set_tick_period(Duration::from_secs(5));
-        true
+impl HttpContext for ActivityLogger {
+    fn on_http_request_headers(&mut self, _: usize) -> Action {
+        for (name, value) in &self.get_http_request_headers() {
+            match &name[..] {
+                "x-request-fid" => self.finc_user_id = value.to_string(),
+                ":path" => self.path = value.to_string(),
+                ":method" => self.method = value.to_string(),
+                _ => (),
+            }
+        }
+
+        Action::Continue
     }
 
-    fn on_tick(&mut self) {
-        info!("World!!!");
+    fn on_http_response_headers(&mut self, _: usize) -> Action {
+        for (name, value) in &self.get_http_response_headers() {
+            if name == ":status" {
+                self.status = value.to_string();
+                break
+            }
+        }
+
+        info!("finc_user_id: {}, path: {}, method: {}, status: {}, logger_type: {}",
+            self.finc_user_id,
+            self.path,
+            self.method,
+            self.status,
+            self.logger_type);
+
+        Action::Continue
     }
 }
